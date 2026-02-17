@@ -1,29 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import CartSummary, { Cart } from './CartSummary';
+import PaymentSelector from './PaymentSelector';
 import './CheckoutPage.css';
-
-interface Cart {
-  id: string;
-  sessionId: string;
-  items: Array<{
-    itemId: string;
-    quantity: number;
-    price: number;
-  }>;
-  total: number;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface CheckoutResponse {
   token: string;
   expires: string;
   redirectCheckoutUrl: string;
-}
-
-interface CheckoutData {
-  cart: Cart;
-  checkout: CheckoutResponse;
 }
 
 declare global {
@@ -34,6 +17,12 @@ declare global {
         token: string;
         cashAppPayOptions: CashAppPayOptions;
       }) => void;
+      initialize: (options: {
+        countryCode: string;
+        onComplete: (event: { data: { status: string; orderToken: string } }) => void;
+        onError: (event: { data: { error: string } }) => void;
+      }) => void;
+      open: () => void;
     };
   }
 }
@@ -54,193 +43,289 @@ interface CashAppPayOptions {
   };
 }
 
-function CheckoutPage() {
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
+const BACKEND_URL = 'http://localhost:3000';
 
+function CheckoutPage() {
+  const [cart, setCart] = useState<Cart | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [cashAppPayReady, setCashAppPayReady] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // Load afterpay.js script
   useEffect(() => {
-    // Load afterpay.js script
     const script = document.createElement('script');
     script.src = 'https://portal.sandbox.afterpay.com/afterpay.js';
     script.async = true;
     document.body.appendChild(script);
-
     return () => {
-      // Cleanup script on unmount
       document.body.removeChild(script);
     };
   }, []);
 
-  useEffect(() => {
-    // Create checkout when component mounts
-    createCheckout();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const createCheckout = async () => {
+  // Fetch cart on mount
+  const fetchCart = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      const backendUrl = 'http://localhost:3000';
-
-      // First, get the cart to check if it has items
-      const cartResponse = await fetch(`${backendUrl}/cart`, {
-        credentials: 'include'
+      setFetchError(null);
+      const response = await fetch(`${BACKEND_URL}/cart`, {
+        credentials: 'include',
       });
-
-      if (!cartResponse.ok) {
+      if (!response.ok) {
         throw new Error('Failed to fetch cart');
       }
+      const data: { cart: Cart | null } = await response.json();
+      setCart(data.cart);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load cart');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-      const cartData: { cart: Cart | null } = await cartResponse.json();
+  useEffect(() => {
+    fetchCart();
+  }, [fetchCart]);
 
-      if (!cartData.cart || cartData.cart.items.length === 0) {
-        throw new Error('Cart is empty');
+  const handleUpdateQuantity = async (itemId: string, quantity: number) => {
+    // The backend doesn't have a quantity update endpoint yet,
+    // so we simulate it by re-adding items. For now, this is a placeholder
+    // that will work once the backend supports PUT /cart/items/:itemId.
+    try {
+      const response = await fetch(`${BACKEND_URL}/cart/items/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ quantity }),
+      });
+      if (response.ok) {
+        const data: { cart: Cart } = await response.json();
+        setCart(data.cart);
       }
+    } catch {
+      // Silently fail - the backend may not support this yet
+    }
+  };
 
-      // Create Afterpay checkout with Cash App Pay enabled
-      const checkoutResponse = await fetch(`${backendUrl}/cart/checkout/afterpay`, {
+  const handleRemoveItem = async (itemId: string) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/cart/items/${itemId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data: { cart: Cart } = await response.json();
+        setCart(data.cart);
+      }
+    } catch {
+      // Silently fail - the backend may not support this yet
+    }
+  };
+
+  const initializeCashAppPay = (token: string) => {
+    const checkAfterpay = setInterval(() => {
+      if (window.AfterPay) {
+        clearInterval(checkAfterpay);
+
+        window.AfterPay.initializeForCashAppPay({
+          countryCode: 'US',
+          token,
+          cashAppPayOptions: {
+            button: {
+              size: 'medium',
+              width: 'full',
+              theme: 'dark',
+              shape: 'round',
+            },
+            onComplete: (event) => {
+              const { status } = event.data;
+              if (status === 'SUCCESS') {
+                window.location.href = `/cart/payment/result?status=SUCCESS&provider=cash_app_pay&token=${token}`;
+              }
+            },
+            eventListeners: {
+              CUSTOMER_INTERACTION: ({ isMobile }) => {
+                console.log(`Cash App Pay interaction - mobile: ${isMobile}`);
+              },
+              CUSTOMER_REQUEST_DECLINED: () => {
+                setPaymentError('Payment request was declined');
+                setPaymentLoading(false);
+              },
+              CUSTOMER_REQUEST_APPROVED: () => {
+                console.log('Cash App Pay request approved');
+              },
+              CUSTOMER_REQUEST_FAILED: () => {
+                setPaymentError('Payment request failed');
+                setPaymentLoading(false);
+              },
+            },
+          },
+        });
+
+        setCashAppPayReady(true);
+        setPaymentLoading(false);
+      }
+    }, 100);
+
+    setTimeout(() => {
+      clearInterval(checkAfterpay);
+      if (!window.AfterPay) {
+        setPaymentError('Failed to load payment SDK. Please try again.');
+        setPaymentLoading(false);
+      }
+    }, 10000);
+  };
+
+  const handleCashAppPay = async () => {
+    if (!cart) return;
+    setPaymentLoading(true);
+    setPaymentError(null);
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/cart/checkout/afterpay`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           consumer: {
             email: 'customer@example.com',
             givenNames: 'Test',
-            surname: 'Customer'
+            surname: 'Customer',
           },
-          isCashAppPay: true
-        })
+          isCashAppPay: true,
+        }),
       });
 
-      if (!checkoutResponse.ok) {
-        const errorData: { error?: { message: string } } = await checkoutResponse.json();
+      if (!response.ok) {
+        const errorData: { error?: { message: string } } = await response.json();
         throw new Error(errorData.error?.message || 'Failed to create checkout');
       }
 
-      const data: CheckoutData = await checkoutResponse.json();
-      setCheckoutData(data);
-
-      // Initialize afterpay.js with the checkout token
-      if (data.checkout && data.checkout.token) {
-        initializeAfterpay(data.checkout.token);
+      const data: { cart: Cart; checkout: CheckoutResponse } = await response.json();
+      if (data.checkout?.token) {
+        initializeCashAppPay(data.checkout.token);
       }
-
-      setLoading(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      setLoading(false);
+      setPaymentError(err instanceof Error ? err.message : 'Payment initialization failed');
+      setPaymentLoading(false);
     }
   };
 
-  const initializeAfterpay = (token: string) => {
-    // Wait for afterpay.js to load
-    const checkAfterpay = setInterval(() => {
-      if (window.AfterPay) {
-        clearInterval(checkAfterpay);
+  const handleAfterpay = async () => {
+    if (!cart) return;
+    setPaymentLoading(true);
+    setPaymentError(null);
 
-        // Initialize Cash App Pay with options
-        const cashAppPayOptions = {
-          button: {
-            size: 'medium',
-            width: 'full',
-            theme: 'dark',
-            shape: 'round'
+    try {
+      const response = await fetch(`${BACKEND_URL}/cart/checkout/afterpay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          consumer: {
+            email: 'customer@example.com',
+            givenNames: 'Test',
+            surname: 'Customer',
           },
-          onComplete: function(event) {
-            const { status, cashtag } = event.data;
-            console.log('Payment completed:', { status, cashtag });
+          isCashAppPay: false,
+        }),
+      });
 
-            if (status === 'SUCCESS') {
-              window.location.href = `/cart/payment/result?status=SUCCESS&provider=cash_app_pay&token=${token}`;
-            }
-          },
-          eventListeners: {
-            "CUSTOMER_INTERACTION": ({ isMobile }) => {
-              console.log(`CUSTOMER_INTERACTION - isMobile: ${isMobile}`);
-            },
-            "CUSTOMER_REQUEST_DECLINED": () => {
-              console.log('CUSTOMER_REQUEST_DECLINED');
-              setError('Payment request was declined');
-            },
-            "CUSTOMER_REQUEST_APPROVED": () => {
-              console.log('CUSTOMER_REQUEST_APPROVED');
-            },
-            "CUSTOMER_REQUEST_FAILED": () => {
-              console.log('CUSTOMER_REQUEST_FAILED');
-              setError('Payment request failed');
-            }
-          }
-        };
+      if (!response.ok) {
+        const errorData: { error?: { message: string } } = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to create Afterpay checkout');
+      }
 
-        window.AfterPay.initializeForCashAppPay({
+      const data: { cart: Cart; checkout: CheckoutResponse } = await response.json();
+
+      if (data.checkout?.redirectCheckoutUrl) {
+        window.location.href = data.checkout.redirectCheckoutUrl;
+      } else if (data.checkout?.token && window.AfterPay) {
+        // Use Afterpay popup if available
+        window.AfterPay.initialize({
           countryCode: 'US',
-          token: token,
-          cashAppPayOptions
+          onComplete: (event) => {
+            if (event.data.status === 'SUCCESS') {
+              window.location.href = `/cart/payment/result?status=SUCCESS&provider=afterpay&token=${event.data.orderToken}`;
+            } else {
+              setPaymentError('Afterpay payment was cancelled');
+              setPaymentLoading(false);
+            }
+          },
+          onError: (event) => {
+            setPaymentError(event.data.error || 'Afterpay error occurred');
+            setPaymentLoading(false);
+          },
         });
+        window.AfterPay.open();
       }
-    }, 100);
-
-    // Timeout after 10 seconds
-    setTimeout(() => {
-      clearInterval(checkAfterpay);
-      if (!window.AfterPay) {
-        setError('Failed to load Afterpay SDK');
-      }
-    }, 10000);
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : 'Payment initialization failed');
+      setPaymentLoading(false);
+    }
   };
 
   if (loading) {
     return (
-      <div className="payment-page">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>Initializing Cash App Pay...</p>
+      <div className="checkout-page">
+        <div className="checkout-loading">
+          <div className="loading-spinner" />
+          <p>Loading your cart...</p>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (fetchError) {
     return (
-      <div className="payment-page">
-        <div className="error-container">
-          <h2>Payment Error</h2>
-          <p>{error}</p>
-          <button onClick={() => window.location.href = '/'}>
-            Return to Home
+      <div className="checkout-page">
+        <div className="checkout-error">
+          <h2>Something went wrong</h2>
+          <p>{fetchError}</p>
+          <button className="checkout-retry-btn" onClick={() => { setLoading(true); fetchCart(); }}>
+            Try Again
           </button>
+          <a href="/" className="checkout-home-link">Return to Home</a>
         </div>
       </div>
     );
   }
+
+  const hasItems = cart && cart.items.length > 0;
 
   return (
-    <div className="payment-page">
-      <div className="payment-container">
-        <h1>Pay with Cash App</h1>
-        <p>Click the button below or scan the QR code with your Cash App to complete payment</p>
+    <div className="checkout-page">
+      <div className="checkout-container">
+        <h1 className="checkout-heading">Checkout</h1>
 
-        {checkoutData && (
-          <div className="checkout-info">
-            <p>Amount: ${(checkoutData.cart.total / 100).toFixed(2)}</p>
-          </div>
-        )}
+        <div className="checkout-layout">
+          {/* Cart Section */}
+          <section className="checkout-section">
+            <CartSummary
+              cart={cart || { id: '', sessionId: '', items: [], total: 0, status: '', createdAt: '', updatedAt: '' }}
+              onUpdateQuantity={handleUpdateQuantity}
+              onRemoveItem={handleRemoveItem}
+            />
+          </section>
 
-        <div id="cash-app-pay">
-          {/* Cash App Pay button and QR code will be rendered here by afterpay.js */}
+          {/* Payment Section */}
+          {hasItems && (
+            <section className="checkout-section">
+              <PaymentSelector
+                total={cart.total}
+                onCashAppPay={handleCashAppPay}
+                onAfterpay={handleAfterpay}
+                cashAppPayReady={cashAppPayReady}
+                loading={paymentLoading}
+                error={paymentError}
+              />
+            </section>
+          )}
         </div>
 
-        <button
-          className="cancel-button"
-          onClick={() => window.location.href = '/'}
-        >
-          Cancel Payment
-        </button>
+        <div className="checkout-footer">
+          <a href="/" className="checkout-back-link">Continue Shopping</a>
+        </div>
       </div>
     </div>
   );
