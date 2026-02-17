@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import './CatalogPage.css';
 
@@ -35,9 +35,10 @@ function CatalogPage() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [addingItemId, setAddingItemId] = useState<string | null>(null);
-  const [addedItemId, setAddedItemId] = useState<string | null>(null);
+  const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
   const [cartItemCount, setCartItemCount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -83,9 +84,23 @@ function CatalogPage() {
     fetchCart();
   }, [fetchItems, fetchCart]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const showToast = (message: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToast(message);
-    setTimeout(() => setToast(null), 2500);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 2500);
   };
 
   const addToCart = async (item: Item) => {
@@ -108,9 +123,15 @@ function CatalogPage() {
       const count = data.cart.items.reduce((sum, ci) => sum + ci.quantity, 0);
       setCartItemCount(count);
 
-      setAddedItemId(item.id);
+      setAddedItemIds((prev) => new Set(prev).add(item.id));
       showToast(`${item.name} added to cart`);
-      setTimeout(() => setAddedItemId(null), 1500);
+      setTimeout(() => {
+        setAddedItemIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
+      }, 1500);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to add to cart');
     } finally {
@@ -190,13 +211,13 @@ function CatalogPage() {
               <div className="product-footer">
                 <span className="product-price">{formatPrice(item.price)}</span>
                 <button
-                  className={`add-to-cart-btn ${addedItemId === item.id ? 'added' : ''}`}
+                  className={`add-to-cart-btn ${addedItemIds.has(item.id) ? 'added' : ''}`}
                   onClick={() => addToCart(item)}
                   disabled={addingItemId === item.id}
                 >
                   {addingItemId === item.id
                     ? 'Adding...'
-                    : addedItemId === item.id
+                    : addedItemIds.has(item.id)
                       ? 'Added!'
                       : 'Add to Cart'}
                 </button>
@@ -207,7 +228,7 @@ function CatalogPage() {
       </div>
 
       {items.length === 0 && (
-        <div className="catalog-loading">
+        <div className="catalog-empty">
           <p>No products available.</p>
         </div>
       )}
