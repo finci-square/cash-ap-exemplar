@@ -1,0 +1,50 @@
+[
+  {
+    "id": "item-001",
+    "name": "Wireless Headphones",
+    "description": "Premium noise-cancelling wireless headphones with 30-hour battery life",
+    "price": 29999,
+    "imageUrl": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop",
+    "sku": "AUDIO-WH-001"
+  },
+  {
+    "id": "item-002",
+    "name": "Smart Watch",
+    "description": "Fitness tracking smartwatch with heart rate monitor and GPS",
+    "price": 39999,
+    "imageUrl": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop",
+    "sku": "WATCH-SW-002"
+  },
+  {
+    "id": "item-003",
+    "name": "Laptop Stand",
+    "description": "Ergonomic aluminum laptop stand with adjustable height",
+    "price": 4999,
+    "imageUrl": "https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400&h=400&fit=crop",
+    "sku": "DESK-LS-003"
+  },
+  {
+    "id": "item-004",
+    "name": "Mechanical Keyboard",
+    "description": "RGB backlit mechanical keyboard with blue switches",
+    "price": 12999,
+    "imageUrl": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=400&h=400&fit=crop",
+    "sku": "INPUT-KB-004"
+  },
+  {
+    "id": "item-005",
+    "name": "Portable Charger",
+    "description": "20000mAh power bank with fast charging and dual USB ports",
+    "price": 3999,
+    "imageUrl": "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=400&h=400&fit=crop",
+    "sku": "POWER-PB-005"
+  },
+  {
+    "id": "item-006",
+    "name": "Webcam HD",
+    "description": "1080p HD webcam with built-in microphone and auto-focus",
+    "price": 7999,
+    "imageUrl": "https://images.unsplash.com/photo-1593642632823-8f785ba67e45?w=400&h=400&fit=crop",
+    "sku": "VIDEO-WC-006"
+  }
+]

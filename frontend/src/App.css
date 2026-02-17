@@ -1,0 +1,88 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.item-card {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  margin: 30px auto;
+  max-width: 500px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.item-image {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.item-card h2 {
+  color: #333;
+  margin: 15px 0 10px;
+  font-size: 24px;
+}
+
+.item-card p {
+  color: #666;
+  margin: 10px 0;
+  font-size: 16px;
+}
+
+.item-price {
+  font-size: 28px;
+  font-weight: bold;
+  color: #00c853;
+  margin: 20px 0;
+}
+
+.add-to-cart-button {
+  background-color: #00c853;
+  color: white;
+  border: none;
+  padding: 12px 30px;
+  font-size: 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  margin-top: 15px;
+}
+
+.add-to-cart-button:hover:not(:disabled) {
+  background-color: #00a844;
+}
+
+.add-to-cart-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.cart-message {
+  color: #00c853;
+  font-weight: bold;
+  margin-top: 15px;
+}
+
+.payment-links {
+  margin-top: 40px;
+}
+
+.pay-button {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  padding: 15px 40px;
+  font-size: 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.pay-button:hover {
+  background-color: #1976d2;
+}
