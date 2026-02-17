@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import CheckoutPage from './CheckoutPage'
+import CatalogPage from './CatalogPage'
 import './App.css'
 
 interface Item {
@@ -152,7 +153,8 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<CatalogPage />} />
+        <Route path="/legacy" element={<Home />} />
         <Route path="/checkout" element={<CheckoutPage />} />
       </Routes>
     </Router>
